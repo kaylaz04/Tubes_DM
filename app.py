@@ -16,8 +16,8 @@ def load_model(file_name):
         st.error(f"Terjadi error saat memuat model {file_name}: {e}")
 
 # Load models
-regression_model = load_model("model.pkl")  # Model regresi
-clustering_model = load_model("modelClustering.pkl")  # Model clustering
+regression_model = load_model("model_new.pkl")  # Model regresi
+clustering_model = load_model("modelClustering_new.pkl")  # Model clustering
 
 if not regression_model or not clustering_model:
     st.stop()
