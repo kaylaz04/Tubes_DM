@@ -6,21 +6,36 @@ import plotly.express as px
 
 # Fungsi untuk memuat model
 def load_model(file_name):
-    with open(file_name, "rb") as f:
-        model = pickle.load(f)
-    return model
+    try:
+        with open(file_name, "rb") as f:
+            model = pickle.load(f)
+        return model
+    except FileNotFoundError:
+        st.error(f"File model {file_name} tidak ditemukan.")
+    except Exception as e:
+        st.error(f"Terjadi error saat memuat model {file_name}: {e}")
 
 # Load models
 regression_model = load_model("model.pkl")  # Model regresi
 clustering_model = load_model("modelClustering.pkl")  # Model clustering
 
+if not regression_model or not clustering_model:
+    st.stop()
+
 # Load dataset
 @st.cache_data
 def load_data():
-    data = pd.read_csv("wines_SPA.csv")  # Gunakan dataset raw
-    return data
+    try:
+        data = pd.read_csv("wines_SPA.csv")  # Gunakan dataset raw
+        return data
+    except FileNotFoundError:
+        st.error("File dataset wines_SPA.csv tidak ditemukan.")
+        return pd.DataFrame()  # Return dataframe kosong jika error
 
 data = load_data()
+
+if data.empty:
+    st.stop()
 
 # Pastikan tipe data konsisten di setiap kolom
 data["rating"] = pd.to_numeric(data["rating"], errors="coerce")
@@ -62,56 +77,63 @@ if st.sidebar.button("Predict Price"):
     st.write("Input Data:")
     st.dataframe(input_data)
 
-    # Perform OneHotEncoding for categorical columns
-    categorical_columns = ["region", "type"]
-    encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-    encoder.fit(data[categorical_columns])  # Fit encoder to the original dataset
+    try:
+        # Perform OneHotEncoding for categorical columns
+        categorical_columns = ["region", "type"]
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+        encoder.fit(data[categorical_columns])  # Fit encoder to the original dataset
 
-    encoded_cats = encoder.transform(input_data[categorical_columns])
-    encoded_cat_columns = encoder.get_feature_names_out(categorical_columns)
+        encoded_cats = encoder.transform(input_data[categorical_columns])
+        encoded_cat_columns = encoder.get_feature_names_out(categorical_columns)
 
-    # Combine numerical and encoded categorical features
-    input_data = input_data.drop(columns=categorical_columns)
-    input_data = pd.concat(
-        [input_data, pd.DataFrame(encoded_cats, columns=encoded_cat_columns)],
-        axis=1
-    )
+        # Combine numerical and encoded categorical features
+        input_data = input_data.drop(columns=categorical_columns)
+        input_data = pd.concat(
+            [input_data, pd.DataFrame(encoded_cats, columns=encoded_cat_columns)],
+            axis=1
+        )
 
-    # Cocokkan urutan kolom dengan model
-    trained_features = regression_model.feature_names_in_  # Fitur yang digunakan saat pelatihan
-    input_data = input_data.reindex(columns=trained_features, fill_value=0)
+        # Cocokkan urutan kolom dengan model
+        trained_features = regression_model.feature_names_in_  # Fitur yang digunakan saat pelatihan
+        input_data = input_data.reindex(columns=trained_features, fill_value=0)
 
-    # Predict Price
-    prediction = regression_model.predict(input_data)[0]
-    st.write(f"Predicted Price: €{prediction:.2f}")
+        # Predict Price
+        prediction = regression_model.predict(input_data)[0]
+        st.write(f"Predicted Price: €{prediction:.2f}")
+    except Exception as e:
+        st.error(f"Error during regression prediction: {e}")
 
 # Clustering Analysis
 st.header("Clustering Analysis")
 selected_region = st.selectbox("Select a Region for Clustering Analysis", region_options)
+
 # Prepare Data for Clustering
 features = ["price", "rating", "body", "acidity", "year"]  # Sesuaikan dengan dataset
 filtered_data = data.dropna(subset=features)  # Hanya gunakan data lengkap untuk clustering
 
-# Scaling only on the filtered data
-scaler = StandardScaler()
-scaled_features = scaler.fit_transform(filtered_data[features])
+try:
+    # Scaling only on the filtered data
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(filtered_data[features])
 
-# Predict clusters for filtered data
-filtered_data["Cluster"] = clustering_model.predict(scaled_features)
+    # Predict clusters for filtered data
+    filtered_data["Cluster"] = clustering_model.predict(scaled_features)
 
-# Filter data by selected region
-region_data = filtered_data[filtered_data["region"] == selected_region]
+    # Filter data by selected region
+    region_data = filtered_data[filtered_data["region"] == selected_region]
 
-if not region_data.empty:
-    # Calculate cluster percentages
-    cluster_counts = region_data["Cluster"].value_counts(normalize=True) * 100
-    cluster_df = cluster_counts.reset_index()
-    cluster_df.columns = ["Cluster", "Percentage"]
+    if not region_data.empty:
+        # Calculate cluster percentages
+        cluster_counts = region_data["Cluster"].value_counts(normalize=True) * 100
+        cluster_df = cluster_counts.reset_index()
+        cluster_df.columns = ["Cluster", "Percentage"]
 
-    # Create pie chart
-    fig = px.pie(cluster_df, names="Cluster", values="Percentage",
-                 title=f"Cluster Distribution for Region: {selected_region}",
-                 labels={"Cluster": "Cluster", "Percentage": "Percentage"})
-    st.plotly_chart(fig)
-else:
-    st.write(f"No data available for the selected region: {selected_region}")
+        # Create pie chart
+        fig = px.pie(cluster_df, names="Cluster", values="Percentage",
+                     title=f"Cluster Distribution for Region: {selected_region}",
+                     labels={"Cluster": "Cluster", "Percentage": "Percentage"})
+        st.plotly_chart(fig)
+    else:
+        st.write(f"No data available for the selected region: {selected_region}")
+except Exception as e:
+    st.error(f"Error during clustering analysis: {e}")
